@@ -35,7 +35,7 @@ router.get('/attendance/:studentId', authenticateUser, attendance.getAttendance)
 router.get('/results/:studentId',    authenticateUser, results.getResults);
 router.get('/exams/:studentId',      authenticateUser, exams.getExams);
 router.get('/syllabus/:studentId',   authenticateUser, syllabus.getSyllabusForStudent);
-router.get('/calendar',              calendar.getCalendar);
+router.get('/calendar',  calendar.getCalendar);
 
 // ══════════════════════════════════════════════════════════════
 // GUEST ROUTES  (no auth)
@@ -49,48 +49,48 @@ router.get('/guest/placements', placement.getPlacementStats);
 // ══════════════════════════════════════════════════════════════
 
 // Users (parents)
-router.get('/admin/users',  authenticateAdmin, admin.listUsers);
-router.post('/admin/users', authenticateAdmin, admin.createUser);
+router.get('/admin/users', admin.listUsers);
+router.post('/admin/users', admin.createUser);
 
 // Students
-router.get('/admin/students',      authenticateAdmin, admin.listStudents);
-router.post('/admin/students',     authenticateAdmin, admin.createStudent);
-router.put('/admin/students/:id',  authenticateAdmin, admin.updateStudent);
+router.get('/admin/students', admin.listStudents);
+router.post('/admin/students', admin.createStudent);
+router.put('/admin/students/:id', admin.updateStudent);
 
 // Courses
-router.get('/admin/courses',               authenticateAdmin, admin.listCourses);
-router.post('/admin/courses',              authenticateAdmin, admin.createCourse);
-router.post('/admin/courses/assign-sem',   authenticateAdmin, admin.assignCourseToSem);
+router.get('/admin/courses', admin.listCourses);
+router.post('/admin/courses', admin.createCourse);
+router.post('/admin/courses/assign-sem', admin.assignCourseToSem);
 
 // Student–Course enrollment (new: student_courses table)
-router.get('/admin/student-courses',          authenticateAdmin, admin.listStudentCourses);
-router.post('/admin/student-courses',         authenticateAdmin, admin.enrollStudentCourse);
-router.put('/admin/student-courses/:id',      authenticateAdmin, admin.updateStudentCourseStatus);
+router.get('/admin/student-courses',  admin.listStudentCourses);
+router.post('/admin/student-courses',  admin.enrollStudentCourse);
+router.put('/admin/student-courses/:id',  admin.updateStudentCourseStatus);
 
 // Components
-router.get('/admin/components',           authenticateAdmin, admin.listComponents);
-router.post('/admin/components/assign',   authenticateAdmin, admin.assignComponent);
-router.get('/admin/course-components',    authenticateAdmin, admin.listCourseComponents);
+router.get('/admin/components',     admin.listComponents);
+router.post('/admin/components/assign', admin.assignComponent);
+router.get('/admin/course-components',   admin.listCourseComponents);
 
 // Attendance
-router.post('/admin/attendance', authenticateAdmin, admin.upsertAttendance);
+router.post('/admin/attendance', admin.upsertAttendance);
 
 // Marks & Results
-router.post('/admin/marks',             authenticateAdmin, admin.upsertMark);
+router.post('/admin/marks',       admin.upsertMark);
 router.post('/admin/results/semester',  authenticateAdmin, admin.upsertSemesterResult);
 
 // Exams
-router.get('/admin/exams',         authenticateAdmin, admin.listExams);
-router.post('/admin/exams',        authenticateAdmin, admin.createExam);
-router.put('/admin/exams/:id',     authenticateAdmin, admin.updateExam);
-router.delete('/admin/exams/:id',  authenticateAdmin, admin.deleteExam);
+router.get('/admin/exams',          admin.listExams);
+router.post('/admin/exams',         admin.createExam);
+router.put('/admin/exams/:id',      admin.updateExam);
+router.delete('/admin/exams/:id',   admin.deleteExam);
 
 // Calendar Events
-router.post('/admin/events',       authenticateAdmin, admin.createEvent);
-router.put('/admin/events/:id',    authenticateAdmin, admin.updateEvent);
-router.delete('/admin/events/:id', authenticateAdmin, admin.deleteEvent);
+router.post('/admin/events',        admin.createEvent);
+router.put('/admin/events/:id',     admin.updateEvent);
+router.delete('/admin/events/:id',  admin.deleteEvent);
 
 // Placements
-router.post('/admin/placements', authenticateAdmin, admin.upsertPlacementStat);
+router.post('/admin/placements',  admin.upsertPlacementStat);
 
 module.exports = router;

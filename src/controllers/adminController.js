@@ -341,16 +341,64 @@ const deleteExam = async (req, res) => {
 };
 
 // ══════════════════════════════════════════════════════════════
-// CALENDAR EVENTS  (with branch + semester scoping)
+// CALENDAR EVENTS  (calendar_departments + calendar_semesters)
+//
+// NULL semantics:
+//   calendar_departments.department = NULL  → event for ALL departments
+//   calendar_semesters.semester     = NULL  → event for ALL semesters
+//   No rows in mapping tables at all        → also global
+//
+// Valid departments: 'CSE','ECE','ISE','EEE','MECH','CIVIL'
+// Valid semesters:   1 – 8
 // ══════════════════════════════════════════════════════════════
 
+// ── Input normalizers ────────────────────────────────────────
+
+// Accepts string | string[] → returns clean string[]
+// e.g. 'CSE' → ['CSE'] | ['CSE','ECE'] → ['CSE','ECE']
+const normalizeTextArray = (value) => {
+  if (value == null) return [];
+  const items = Array.isArray(value) ? value : [value];
+  return items
+    .map((item) => String(item || '').trim())
+    .filter((item) => item.length > 0);
+};
+
+// Accepts int | int[] | null | undefined
+// undefined       → [null]  (caller did not supply — treat as all semesters)
+// null / ''       → [null]  (explicit all-semesters)
+// [5, 6]          → [5, 6]
+// [5, null]       → [5, null]
+const normalizeNullableSemesterArray = (value) => {
+  if (value === undefined) return [null];
+  const items = Array.isArray(value) ? value : [value];
+  const semesters = items.map((item) => {
+    if (item === null || item === '') return null;
+    const n = Number(item);
+    return Number.isInteger(n) ? n : null;
+  });
+  return semesters.length > 0 ? semesters : [null];
+};
+
+// ── POST /admin/events ───────────────────────────────────────
+// Body:
+//   title, event_date, event_type           — required/optional
+//   departments | department | branches | branch  — which depts (omit = all)
+//   semesters   | semester                   — which sems  (omit = all)
 const createEvent = async (req, res) => {
-  const { title, event_date, event_type, branches, semesters } = req.body;
-  // branches  = ['CSE', 'ISE']  optional — null means all branches
-  // semesters = [5, 6]          optional — null means all semesters
+  const {
+    title, event_date, event_type,
+    departments, department, branches, branch,
+    semesters, semester,
+  } = req.body;
+
   if (!title || !event_date) {
     return res.status(400).json({ success: false, message: 'title and event_date are required' });
   }
+
+  // Resolve inputs — accept all aliases
+  const resolvedDepartments = normalizeTextArray(departments ?? department ?? branches ?? branch);
+  const resolvedSemesters   = normalizeNullableSemesterArray(semesters ?? semester);
 
   const client = await db.connect();
   try {
@@ -358,43 +406,59 @@ const createEvent = async (req, res) => {
 
     const { rows } = await client.query(
       `INSERT INTO calendar_events (title, event_date, event_type)
-       VALUES ($1, $2, $3)
-       RETURNING id`,
+       VALUES ($1, $2, $3) RETURNING id`,
       [title, event_date, event_type || 'other']
     );
     const calId = rows[0].id;
 
-    if (branches && branches.length > 0) {
-      for (const branch of branches) {
-        await client.query(
-          'INSERT INTO calendar_branches (cal_id, branch) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-          [calId, branch]
-        );
-      }
+    // calendar_departments: (id, cal_id, department) — NO semester column
+    // NULL department = event applies to ALL departments
+    const deptRows = resolvedDepartments.length > 0 ? resolvedDepartments : [null];
+    for (const dept of deptRows) {
+      await client.query(
+        `INSERT INTO calendar_department (cal_id, department)
+         VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [calId, dept]
+      );
     }
 
-    if (semesters && semesters.length > 0) {
-      for (const sem of semesters) {
-        await client.query(
-          'INSERT INTO calendar_semesters (cal_id, semester) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-          [calId, sem]
-        );
-      }
+    // calendar_semesters: (id, cal_id, semester)
+    // NULL semester = event applies to ALL semesters
+    for (const sem of resolvedSemesters) {
+      await client.query(
+        `INSERT INTO calendar_semesters (cal_id, semester)
+         VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [calId, sem]
+      );
     }
 
     await client.query('COMMIT');
-    res.status(201).json({ success: true, message: 'Event created', eventId: calId });
+    return res.status(201).json({ success: true, message: 'Event created', eventId: calId });
   } catch (err) {
     await client.query('ROLLBACK');
-    throw err;
+    console.error('createEvent error:', err);
+    return res.status(500).json({ success: false, message: 'Failed to create event' });
   } finally {
     client.release();
   }
 };
 
+// ── PUT /admin/events/:id ────────────────────────────────────
+// Partial updates supported:
+//   - If departments/branches not provided → department rows untouched
+//   - If semesters not provided            → semester rows untouched
 const updateEvent = async (req, res) => {
   const { id } = req.params;
-  const { title, event_date, event_type, branches, semesters } = req.body;
+  const {
+    title, event_date, event_type,
+    departments, department, branches, branch,
+    semesters, semester,
+  } = req.body;
+
+  const departmentsProvided =
+    departments !== undefined || department !== undefined ||
+    branches    !== undefined || branch     !== undefined;
+  const semestersProvided   = semesters !== undefined || semester !== undefined;
 
   const client = await db.connect();
   try {
@@ -405,51 +469,55 @@ const updateEvent = async (req, res) => {
       [title, event_date, event_type, id]
     );
 
-    // Replace branch/semester scoping completely on update
-    if (branches !== undefined) {
-      await client.query('DELETE FROM calendar_branches WHERE cal_id=$1', [id]);
-      for (const branch of (branches || [])) {
+    if (departmentsProvided) {
+      await client.query('DELETE FROM calendar_department WHERE cal_id=$1', [id]);
+      const resolvedDepts = normalizeTextArray(departments ?? department ?? branches ?? branch);
+      const deptRows = resolvedDepts.length > 0 ? resolvedDepts : [null];
+      for (const dept of deptRows) {
         await client.query(
-          'INSERT INTO calendar_branches (cal_id, branch) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-          [id, branch]
+          `INSERT INTO calendar_department (cal_id, department)
+           VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+          [id, dept]
         );
       }
     }
 
-    if (semesters !== undefined) {
+    if (semestersProvided) {
       await client.query('DELETE FROM calendar_semesters WHERE cal_id=$1', [id]);
-      for (const sem of (semesters || [])) {
+      for (const sem of normalizeNullableSemesterArray(semesters ?? semester)) {
         await client.query(
-          'INSERT INTO calendar_semesters (cal_id, semester) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+          `INSERT INTO calendar_semesters (cal_id, semester)
+           VALUES ($1, $2) ON CONFLICT DO NOTHING`,
           [id, sem]
         );
       }
     }
 
     await client.query('COMMIT');
-    res.json({ success: true, message: 'Event updated' });
+    return res.json({ success: true, message: 'Event updated' });
   } catch (err) {
     await client.query('ROLLBACK');
-    throw err;
+    console.error('updateEvent error:', err);
+    return res.status(500).json({ success: false, message: 'Failed to update event' });
   } finally {
     client.release();
   }
 };
 
+// ── DELETE /admin/events/:id ─────────────────────────────────
 const deleteEvent = async (req, res) => {
-  // calendar_branches and calendar_semesters have FK to calendar_events
-  // delete those first or rely on CASCADE if defined
   const client = await db.connect();
   try {
     await client.query('BEGIN');
-    await client.query('DELETE FROM calendar_branches  WHERE cal_id=$1', [req.params.id]);
-    await client.query('DELETE FROM calendar_semesters WHERE cal_id=$1', [req.params.id]);
-    await client.query('DELETE FROM calendar_events    WHERE id=$1',     [req.params.id]);
+    await client.query('DELETE FROM calendar_department WHERE cal_id=$1', [req.params.id]);
+    await client.query('DELETE FROM calendar_semesters   WHERE cal_id=$1', [req.params.id]);
+    await client.query('DELETE FROM calendar_events      WHERE id=$1',     [req.params.id]);
     await client.query('COMMIT');
-    res.json({ success: true, message: 'Event deleted' });
+    return res.json({ success: true, message: 'Event deleted' });
   } catch (err) {
     await client.query('ROLLBACK');
-    throw err;
+    console.error('deleteEvent error:', err);
+    return res.status(500).json({ success: false, message: 'Failed to delete event' });
   } finally {
     client.release();
   }
@@ -464,7 +532,7 @@ const upsertPlacementStat = async (req, res) => {
   if (!academic_year) {
     return res.status(400).json({ success: false, message: 'academic_year is required' });
   }
-
+ 
   await db.query(
     `INSERT INTO placements (academic_year, department, total_placed, avg_package_lpa)
      VALUES ($1, $2, $3, $4)
