@@ -34,14 +34,15 @@ router.post('/auth/admin/login',            auth.adminLogin);
 router.get('/attendance/:studentId', authenticateUser, attendance.getAttendance);
 router.get('/results/:studentId',    authenticateUser, results.getResults);
 router.get('/exams/:studentId',      authenticateUser, exams.getExams);
-router.get('/syllabus/:studentId',   authenticateUser, syllabus.getSyllabusForStudent);
+router.get('/syllabus/:studentId',   authenticateUser, syllabus.getSyllabus);  // enrolled courses
+router.get('/syllabus',              syllabus.getSyllabus);  // all or ?sem=N (public)
 router.get('/calendar',  calendar.getCalendar);
 
 // ══════════════════════════════════════════════════════════════
 // GUEST ROUTES  (no auth)
 // ══════════════════════════════════════════════════════════════
 router.get('/guest/calendar',   calendar.getCalendar);
-router.get('/guest/syllabus',   syllabus.getSyllabusBySem);
+router.get('/guest/syllabus',   syllabus.getSyllabus);  // same handler, ?sem=N
 router.get('/guest/placements', placement.getPlacementStats);
 
 // ══════════════════════════════════════════════════════════════

@@ -1,51 +1,100 @@
 const db = require('../config/db');
 
-// GET /api/syllabus/:studentId  (authenticated parent)
-// Shows courses this student is enrolled in for their current semester
-const getSyllabusForStudent = async (req, res) => {
-  const { studentId } = req.params;
+// Single handler — three modes:
+//
+//   GET /api/syllabus/:studentId  → courses the student is enrolled in (all sems)
+//   GET /api/syllabus?sem=5       → all courses offered in sem 5
+//   GET /api/syllabus             → all courses across all semesters
+//
+// :studentId requires auth. ?sem and bare route are public.
 
-  const { rows: ownership } = await db.query(
-    'SELECT id, current_sem FROM students WHERE id = $1 AND user_id = $2',
-    [studentId, req.user.id]
-  );
-  if (ownership.length === 0) {
-    return res.status(403).json({ success: false, message: 'Access denied' });
+const getSyllabus = async (req, res) => {
+  const { studentId } = req.params;   // present only when route is /syllabus/:studentId
+  const { sem }       = req.query;
+
+  // ══════════════════════════════════════════════════════════════
+  // MODE 1: /api/syllabus/:studentId
+  // Returns courses the student is enrolled in (via student_courses)
+  // ══════════════════════════════════════════════════════════════
+  if (studentId) {
+    // Auth check — only the parent of this student can access
+    const { rows: ownership } = await db.query(
+      'SELECT id, current_sem FROM students WHERE id = $1 AND user_id = $2',
+      [studentId, req.user.id]
+    );
+    if (ownership.length === 0) {
+      return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+
+    const { rows: courses } = await db.query(
+      `SELECT
+         c.id,
+         c.course_code,
+         c.name,
+         c.course_type,
+         c.elective_type,
+         c.syllabus_url,
+         c.summary,
+         sem.semester,
+         sem.batch_year,
+         sc.id AS student_course_id
+       FROM student_courses sc
+       JOIN semester_courses sem ON sem.id = sc.semester_course_id
+       JOIN courses          c   ON c.id   = sem.course_id
+       WHERE sc.student_id = $1
+       ORDER BY sem.semester, c.course_code`,
+      [studentId]
+    );
+
+    return res.json({
+      success:     true,
+      mode:        'enrolled',
+      student_id:  parseInt(studentId),
+      current_sem: ownership[0].current_sem,
+      courses,
+    });
   }
 
-  const currentSem = ownership[0].current_sem;
+  // ══════════════════════════════════════════════════════════════
+  // MODE 2: /api/syllabus?sem=5
+  // Returns all courses offered in that semester (no enrollment filter)
+  // ══════════════════════════════════════════════════════════════
+  if (sem !== undefined) {
+    const parsed = parseInt(sem);
+    if (isNaN(parsed) || parsed < 1 || parsed > 8) {
+      return res.status(400).json({ success: false, message: 'sem must be an integer between 1 and 8' });
+    }
 
-  const { rows: courses } = await db.query(
-    `SELECT
-       c.id,
-       c.course_code,
-       c.name,
-       c.course_type,
-       c.elective_type,
-       c.syllabus_url,
-       c.summary,
-       sc.id AS student_course_id,
-       'enrolled' AS enrollment_status
-     FROM student_courses sc2
-     JOIN semester_courses  sem ON sem.id = sc2.semester_course_id
-     JOIN courses           c   ON c.id   = sem.course_id
-     JOIN semester_courses  sc  ON sc.id  = sem.id
-     WHERE sc2.student_id = $1 AND sem.semester = $2
-     ORDER BY c.course_code`,
-    [studentId, currentSem]
-  );
+    const { rows: courses } = await db.query(
+      `SELECT
+         c.id,
+         c.course_code,
+         c.name,
+         c.course_type,
+         c.elective_type,
+         c.syllabus_url,
+         c.summary,
+         sem.semester,
+         sem.batch_year
+       FROM semester_courses sem
+       JOIN courses c ON c.id = sem.course_id
+       WHERE sem.semester = $1
+       ORDER BY c.course_code`,
+      [parsed]
+    );
 
-  res.json({ success: true, semester: currentSem, courses });
-};
-
-// GET /api/guest/syllabus?sem=3  (no auth)
-// Shows all courses offered in a given semester
-const getSyllabusBySem = async (req, res) => {
-  const sem = parseInt(req.query.sem);
-  if (!sem || sem < 1 || sem > 8) {
-    return res.status(400).json({ success: false, message: 'sem query param (1-8) is required' });
+    return res.json({
+      success:  true,
+      mode:     'semester',
+      semester: parsed,
+      courses,
+    });
   }
 
+  // ══════════════════════════════════════════════════════════════
+  // MODE 3: /api/syllabus
+  // Returns all courses across all semesters
+  // ══════════════════════════════════════════════════════════════
   const { rows: courses } = await db.query(
     `SELECT
        c.id,
@@ -59,12 +108,14 @@ const getSyllabusBySem = async (req, res) => {
        sem.batch_year
      FROM semester_courses sem
      JOIN courses c ON c.id = sem.course_id
-     WHERE sem.semester = $1
-     ORDER BY c.course_code`,
-    [sem]
+     ORDER BY sem.semester, c.course_code`
   );
 
-  res.json({ success: true, semester: sem, courses });
+  return res.json({
+    success: true,
+    mode:    'all',
+    courses,
+  });
 };
 
-module.exports = { getSyllabusForStudent, getSyllabusBySem };
+module.exports = { getSyllabus };
