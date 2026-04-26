@@ -60,6 +60,7 @@ router.get("/guest/placements", placement.getPlacementStats);
 //Chatbot route
 //=══════════════════════════════════════════════════════════════
 router.get("/student/:studentId/performance", performance.getPerformance);
+router.get("/student/:studentId/performance/:sem/:intent?", performance.getPerformanceBySem);
 
 // ══════════════════════════════════════════════════════════════
 // ADMIN ROUTES

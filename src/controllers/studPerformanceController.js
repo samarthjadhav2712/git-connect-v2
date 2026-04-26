@@ -6,12 +6,13 @@ const getStatus = (pct) => {
   return "critical";
 };
 
-// GET /api/student/:studentId/performance
-const getPerformance = async (req, res) => {
-  const { studentId } = req.params;
+const fetchPerformanceData = async (studentId, sem, res) => {
+  const queryParams = sem ? [studentId, sem] : [studentId];
+  const semFilter = sem ? 'AND sem.semester = $2' : '';
+  const resultSemFilter = sem ? 'AND semester = $2' : '';
 
   const [attendanceRows, marksRows, semResults] = await Promise.all([
-    // Attendance query (from your attendance controller)
+    // Attendance query
     db.query(
       `SELECT
          a.id,
@@ -28,12 +29,12 @@ const getPerformance = async (req, res) => {
        JOIN student_courses  sc  ON sc.id  = a.student_course_id
        JOIN semester_courses sem ON sem.id = sc.semester_course_id
        JOIN courses           c  ON c.id   = sem.course_id
-       WHERE sc.student_id = $1
+       WHERE sc.student_id = $1 ${semFilter}
        ORDER BY c.course_code`,
-      [studentId],
+      queryParams,
     ),
 
-    // Marks query (from your results controller)
+    // Marks query
     db.query(
       `SELECT
          sem.semester,
@@ -49,18 +50,18 @@ const getPerformance = async (req, res) => {
        JOIN courses           c   ON c.id    = sem.course_id
        JOIN course_components cc  ON cc.id   = m.course_comp_id
        JOIN components        comp ON comp.id = cc.comp_id
-       WHERE sc.student_id = $1
+       WHERE sc.student_id = $1 ${semFilter}
        ORDER BY sem.semester, c.course_code, comp.comp_name`,
-      [studentId],
+      queryParams,
     ),
 
-    // Semester SGPA/CGPA query (from your results controller)
+    // Semester SGPA/CGPA query
     db.query(
       `SELECT semester, sgpa, cgpa
        FROM semester_results
-       WHERE student_id = $1
+       WHERE student_id = $1 ${resultSemFilter}
        ORDER BY semester`,
-      [studentId],
+      queryParams,
     ),
   ]);
 
@@ -87,11 +88,11 @@ const getPerformance = async (req, res) => {
   // ── Results processing ─────────────────────────────────────────
   const semMap = {};
   for (const row of marksRows.rows) {
-    const sem = row.semester;
+    const semRow = row.semester;
     const subj = row.subject;
-    if (!semMap[sem]) semMap[sem] = {};
-    if (!semMap[sem][subj]) {
-      semMap[sem][subj] = {
+    if (!semMap[semRow]) semMap[semRow] = {};
+    if (!semMap[semRow][subj]) {
+      semMap[semRow][subj] = {
         course_code: row.course_code,
         subject: subj,
         course_type: row.course_type,
@@ -99,11 +100,11 @@ const getPerformance = async (req, res) => {
         total: 0,
       };
     }
-    semMap[sem][subj].components[row.component] = {
+    semMap[semRow][subj].components[row.component] = {
       scored: parseFloat(row.marks_scored) || 0,
       max: parseFloat(row.max_marks),
     };
-    semMap[sem][subj].total += parseFloat(row.marks_scored) || 0;
+    semMap[semRow][subj].total += parseFloat(row.marks_scored) || 0;
   }
 
   const latestCgpa =
@@ -132,4 +133,30 @@ const getPerformance = async (req, res) => {
   });
 };
 
-module.exports = { getPerformance };
+// GET /api/student/:studentId/performance
+const getPerformance = async (req, res) => {
+  return fetchPerformanceData(req.params.studentId, null, res);
+};
+
+// GET /api/student/:studentId/performance/:sem
+const getPerformanceBySem = async (req, res) => {
+  const sem = req.params.sem || req.query.sem;
+  const intent = req.params.intent || req.query.intent;
+
+  // Intercept the response to filter based on intent
+  if (intent) {
+    const originalJson = res.json;
+    res.json = (data) => {
+      if (intent === 'results') {
+        delete data.attendance;
+      } else if (intent === 'attendance') {
+        delete data.results;
+      }
+      return originalJson.call(res, data);
+    };
+  }
+
+  return fetchPerformanceData(req.params.studentId, sem, res);
+};
+
+module.exports = { getPerformance, getPerformanceBySem };
