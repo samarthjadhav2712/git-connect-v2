@@ -1,6 +1,6 @@
-const { Pool } = require('pg');
-require('dotenv').config();
 
+require('dotenv').config();
+const { Pool } = require('pg');
 const normalizeConnectionString = (url) => {
   if (!url) return url;
 
@@ -17,15 +17,7 @@ const pool = new Pool({
   connectionTimeoutMillis: 5000,
 });
 
-// Verify connection on startup
-pool.connect()
-  .then(client => {
-    console.log('✅  Connected to Neon PostgreSQL');
-    client.release();
-  })
-  .catch(err => {
-    console.error('❌  Neon DB connection failed:', err.message);
-    process.exit(1);
-  });
+
+
 
 module.exports = pool;

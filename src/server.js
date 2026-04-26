@@ -2,6 +2,8 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const routes = require("./routes/route");
+const pool = require("./config/db");
+
 
 const app = express();
 const BASE_PORT = Number(process.env.PORT) || 3000;
@@ -32,7 +34,16 @@ app.use((err, req, res, next) => {
 });
 
 // ── Start ─────────────────────────────────────────────────────
-const startServer = (port, retriesLeft = MAX_PORT_RETRIES) => {
+const startServer = async (port, retriesLeft = MAX_PORT_RETRIES) => {
+  try {
+    const client = await pool.connect();
+    console.log("✅ Connected to Neon DB");
+    client.release();
+  } catch (err) {
+    console.error("❌ DB connection failed:", err);
+    process.exit(1);
+  }
+
   const server = app.listen(port, () => {
     console.log(`GIT Connect API running on http://localhost:${port}`);
     console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
