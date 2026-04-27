@@ -1,5 +1,27 @@
 const db = require('../config/db');
 
+const toNumberOrNull = (value) => {
+  if (value === null || value === undefined) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+};
+
+const getGrade = (value) => {
+  const n = toNumberOrNull(value);
+  if (n === null) return null;
+  if (n >= 9) return 'S';
+  if (n >= 8) return 'A';
+  if (n >= 7) return 'B';
+  if (n >= 6) return 'C';
+  return 'F';
+};
+
+const getResultStatus = (value) => {
+  const n = toNumberOrNull(value);
+  if (n === null) return null;
+  return n >= 6 ? 'pass' : 'fail';
+};
+
 // GET /api/results/:studentId
 const getResults = async (req, res) => {
   const { studentId } = req.params;
@@ -32,6 +54,7 @@ const getResults = async (req, res) => {
        sem.semester,
        c.course_code,
        c.name          AS subject,
+       c.credits,
        c.course_type,
        comp.comp_name  AS component,
        cc.max_marks,
@@ -57,6 +80,7 @@ const getResults = async (req, res) => {
       semMap[sem][subj] = {
         course_code:  row.course_code,
         subject:      subj,
+        credits:      row.credits != null ? Number(row.credits) : null,
         course_type:  row.course_type,
         components:   {},
         total:        0,
@@ -69,14 +93,31 @@ const getResults = async (req, res) => {
     semMap[sem][subj].total += parseFloat(row.marks_scored) || 0;
   }
 
-  const semesters = semResults.map(sr => ({
-    semester: sr.semester,
-    sgpa:     sr.sgpa,
-    cgpa:     sr.cgpa,
-    subjects: Object.values(semMap[sr.semester] || {}),
-  }));
+  const semesters = semResults.map((sr) => {
+    const sgpa = toNumberOrNull(sr.sgpa);
+    const cgpa = toNumberOrNull(sr.cgpa);
 
-  res.json({ success: true, current_cgpa: latestCgpa, semesters });
+    return {
+      semester: sr.semester,
+      sgpa,
+      sgpa_grade: getGrade(sgpa),
+      sgpa_result: getResultStatus(sgpa),
+      cgpa,
+      cgpa_grade: getGrade(cgpa),
+      cgpa_result: getResultStatus(cgpa),
+      subjects: Object.values(semMap[sr.semester] || {}),
+    };
+  });
+
+  const currentCgpa = toNumberOrNull(latestCgpa);
+
+  res.json({
+    success: true,
+    current_cgpa: currentCgpa,
+    current_cgpa_grade: getGrade(currentCgpa),
+    current_cgpa_result: getResultStatus(currentCgpa),
+    semesters,
+  });
 };
 
 module.exports = { getResults };
