@@ -4,6 +4,7 @@ const cors = require("cors");
 const routes = require("./routes/route");
 const pool = require("./config/db");
 
+const {runAgent} = require("./ai/agent")
 
 const app = express();
 const BASE_PORT = Number(process.env.PORT) || 3000;
@@ -15,9 +16,16 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // ── Health check ──────────────────────────────────────────────
-app.get("/health", (req, res) =>
-  res.json({ status: "ok", timestamp: new Date() }),
-);
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", timestamp: new Date() })
+});
+
+// ── Health check ──────────────────────────────────────────────
+app.get("/health-ai", async (req, res) => {
+  const resp = await runAgent("What is the marks of student with USN 2GI22CS001?")
+
+  res.json({ status: "ok", response: resp})
+});
 
 // ── API Routes ────────────────────────────────────────────────
 app.use("/api", routes);

@@ -1,0 +1,309 @@
+tables: 
+    admins               
+    attendance           
+    calendar_department  
+    calendar_events      
+    calendar_semesters   
+    components           
+    course_components    
+    course_translations  
+    courses              
+    exams                
+    marks                
+    otp_store            
+    placements           
+    semester_courses     
+    semester_results     
+    student_courses      
+    students             
+    users                
+
+
+neondb=> \d admins
+                                       Table "public.admins"
+    Column     |          Type          | Collation | Nullable |              Default               
+---------------+------------------------+-----------+----------+------------------------------------
+ id            | integer                |           | not null | nextval('admins_id_seq'::regclass)
+ username      | character varying(100) |           |          | 
+ password_hash | character varying(255) |           |          | 
+Indexes:
+    "admins_pkey" PRIMARY KEY, btree (id)
+
+neondb=> \d attendance
+                                  Table "public.attendance"
+      Column       |  Type   | Collation | Nullable |                Default                 
+-------------------+---------+-----------+----------+----------------------------------------
+ id                | integer |           | not null | nextval('attendance_id_seq'::regclass)
+ student_course_id | integer |           | not null | 
+ attended_classes  | integer |           |          | 0
+ total_classes     | integer |           |          | 0
+Indexes:
+    "attendance_pkey" PRIMARY KEY, btree (id)
+    "attendance_student_course_id_key" UNIQUE CONSTRAINT, btree (student_course_id)
+Foreign-key constraints:
+    "fk_attendance_student_course" FOREIGN KEY (student_course_id) REFERENCES student_courses(id)
+
+neondb=> \d calendar_department
+                           Table "public.calendar_department"
+   Column   |    Type    | Collation | Nullable |                Default                
+------------+------------+-----------+----------+---------------------------------------
+ id         | integer    |           | not null | nextval('calendar__id_seq'::regclass)
+ cal_id     | integer    |           |          | 
+ department | department |           |          | 
+Indexes:
+    "calendar__pkey" PRIMARY KEY, btree (id)
+Foreign-key constraints:
+    "fk_cal_department_event" FOREIGN KEY (cal_id) REFERENCES calendar_events(id)
+
+neondb=> \d calendar_events
+                                      Table "public.calendar_events"
+   Column   |          Type          | Collation | Nullable |                   Default                   
+------------+------------------------+-----------+----------+---------------------------------------------
+ id         | integer                |           | not null | nextval('calendar_events_id_seq'::regclass)
+ title      | character varying(200) |           |          | 
+ event_date | date                   |           |          | 
+ event_type | event_type_enum        |           |          | 
+Indexes:
+    "calendar_events_pkey" PRIMARY KEY, btree (id)
+Referenced by:
+    TABLE "calendar_semesters" CONSTRAINT "calendar_semesters_cal_id_fkey" FOREIGN KEY (cal_id) REFERENCES calendar_events(id)
+    TABLE "calendar_department" CONSTRAINT "fk_cal_department_event" FOREIGN KEY (cal_id) REFERENCES calendar_events(id)
+
+neondb=> \d calendar_semesters
+                              Table "public.calendar_semesters"
+  Column  |   Type   | Collation | Nullable |                    Default                     
+----------+----------+-----------+----------+------------------------------------------------
+ cal_id   | integer  |           | not null | 
+ semester | smallint |           |          | 
+ id       | integer  |           | not null | nextval('calendar_semesters_id_seq'::regclass)
+Indexes:
+    "calendar_semesters_pkey" PRIMARY KEY, btree (id)
+Foreign-key constraints:
+    "calendar_semesters_cal_id_fkey" FOREIGN KEY (cal_id) REFERENCES calendar_events(id)
+
+
+neondb=> \d components
+                                     Table "public.components"
+  Column   |          Type          | Collation | Nullable |                Default                 
+-----------+------------------------+-----------+----------+----------------------------------------
+ id        | integer                |           | not null | nextval('components_id_seq'::regclass)
+ comp_name | character varying(100) |           |          | 
+Indexes:
+    "components_pkey" PRIMARY KEY, btree (id)
+Referenced by:
+    TABLE "course_components" CONSTRAINT "course_components_comp_id_fkey" FOREIGN KEY (comp_id) REFERENCES components(id)
+
+neondb=> \d course_components
+                                Table "public.course_components"
+  Column   |     Type     | Collation | Nullable |                    Default                    
+-----------+--------------+-----------+----------+-----------------------------------------------
+ id        | integer      |           | not null | nextval('course_components_id_seq'::regclass)
+ course_id | integer      |           |          | 
+ comp_id   | integer      |           |          | 
+ max_marks | numeric(5,2) |           |          | 
+Indexes:
+    "course_components_pkey" PRIMARY KEY, btree (id)
+Foreign-key constraints:
+    "course_components_comp_id_fkey" FOREIGN KEY (comp_id) REFERENCES components(id)
+    "course_components_course_id_fkey" FOREIGN KEY (course_id) REFERENCES courses(id)
+Referenced by:
+    TABLE "exams" CONSTRAINT "exams_course_comp_id_fkey" FOREIGN KEY (course_comp_id) REFERENCES course_components(id)
+    TABLE "marks" CONSTRAINT "marks_course_comp_id_fkey" FOREIGN KEY (course_comp_id) REFERENCES course_components(id)
+
+neondb=> \d course_translations
+                                     Table "public.course_translations"
+  Column   |          Type          | Collation | Nullable |                     Default                     
+-----------+------------------------+-----------+----------+-------------------------------------------------
+ id        | integer                |           | not null | nextval('course_translations_id_seq'::regclass)
+ course_id | integer                |           |          | 
+ lang_code | character varying(10)  |           |          | 
+ name      | character varying(100) |           |          | 
+ summary   | text                   |           |          | 
+Indexes:
+    "course_translations_pkey" PRIMARY KEY, btree (id)
+    "course_translations_course_id_lang_code_key" UNIQUE CONSTRAINT, btree (course_id, lang_code)
+Foreign-key constraints:
+    "course_translations_course_id_fkey" FOREIGN KEY (course_id) REFERENCES courses(id)
+
+neondb=> \d courses
+                                       Table "public.courses"
+    Column     |          Type          | Collation | Nullable |               Default               
+---------------+------------------------+-----------+----------+-------------------------------------
+ id            | integer                |           | not null | nextval('courses_id_seq'::regclass)
+ course_code   | character varying(50)  |           |          | 
+ name          | character varying(100) |           | not null | 
+ course_type   | course_type_enum       |           | not null | 
+ elective_type | elective_type_enum     |           |          | 
+ syllabus_url  | character varying(255) |           |          | 
+ summary       | text                   |           |          | 
+ credits       | integer                |           |          | 
+ department    | department             |           |          | 
+Indexes:
+    "courses_pkey" PRIMARY KEY, btree (id)
+    "courses_course_code_key" UNIQUE CONSTRAINT, btree (course_code)
+Check constraints:
+    "courses_elective_type_check" CHECK (elective_type IS NULL OR (elective_type = ANY (ARRAY['professional'::elective_type_enum, 'extra_curricular'::elective_type_enum, 'open'::elective_type_enum, 'core'::elective_type_enum])))
+Referenced by:
+    TABLE "course_components" CONSTRAINT "course_components_course_id_fkey" FOREIGN KEY (course_id) REFERENCES courses(id)
+    TABLE "course_translations" CONSTRAINT "course_translations_course_id_fkey" FOREIGN KEY (course_id) REFERENCES courses(id)
+    TABLE "semester_courses" CONSTRAINT "semester_courses_course_id_fkey" FOREIGN KEY (course_id) REFERENCES courses(id)
+
+neondb=> \d exams
+                                        Table "public.exams"
+     Column     |          Type          | Collation | Nullable |              Default              
+----------------+------------------------+-----------+----------+-----------------------------------
+ id             | integer                |           | not null | nextval('exams_id_seq'::regclass)
+ course_comp_id | integer                |           |          | 
+ exam_date      | date                   |           |          | 
+ start_time     | time without time zone |           |          | 
+ end_time       | time without time zone |           |          | 
+Indexes:
+    "exams_pkey" PRIMARY KEY, btree (id)
+Foreign-key constraints:
+    "exams_course_comp_id_fkey" FOREIGN KEY (course_comp_id) REFERENCES course_components(id)
+
+neondb=> \d marks
+                                    Table "public.marks"
+      Column       |     Type     | Collation | Nullable |              Default              
+-------------------+--------------+-----------+----------+-----------------------------------
+ id                | integer      |           | not null | nextval('marks_id_seq'::regclass)
+ student_course_id | integer      |           |          | 
+ course_comp_id    | integer      |           |          | 
+ marks_scored      | numeric(5,2) |           |          | 
+Indexes:
+    "marks_pkey" PRIMARY KEY, btree (id)
+Foreign-key constraints:
+    "fk_marks_student_course" FOREIGN KEY (student_course_id) REFERENCES student_courses(id)
+    "marks_course_comp_id_fkey" FOREIGN KEY (course_comp_id) REFERENCES course_components(id)
+
+neondb=> \d otp_store
+                                        Table "public.otp_store"
+   Column   |            Type             | Collation | Nullable |                Default                
+------------+-----------------------------+-----------+----------+---------------------------------------
+ id         | integer                     |           | not null | nextval('otp_store_id_seq'::regclass)
+ mobile     | character varying(15)       |           |          | 
+ otp        | character varying(10)       |           |          | 
+ expires_at | timestamp without time zone |           |          | 
+ used       | boolean                     |           |          | 
+Indexes:
+    "otp_store_pkey" PRIMARY KEY, btree (id)
+
+neondb=> \d placements
+                                        Table "public.placements"
+     Column      |          Type          | Collation | Nullable |                Default                 
+-----------------+------------------------+-----------+----------+----------------------------------------
+ id              | integer                |           | not null | nextval('placements_id_seq'::regclass)
+ academic_year   | character varying(20)  |           |          | 
+ department      | character varying(100) |           |          | 
+ total_placed    | integer                |           |          | 
+ avg_package_lpa | numeric(6,2)           |           |          | 
+Indexes:
+    "placements_pkey" PRIMARY KEY, btree (id)
+    "placements_academic_year_department_key" UNIQUE CONSTRAINT, btree (academic_year, department)
+
+neondb=> \d semester_courses
+                               Table "public.semester_courses"
+   Column   |   Type   | Collation | Nullable |                   Default                    
+------------+----------+-----------+----------+----------------------------------------------
+ id         | integer  |           | not null | nextval('semester_courses_id_seq'::regclass)
+ course_id  | integer  |           |          | 
+ semester   | smallint |           |          | 
+ batch_year | integer  |           |          | 
+Indexes:
+    "semester_courses_pkey" PRIMARY KEY, btree (id)
+Foreign-key constraints:
+    "semester_courses_course_id_fkey" FOREIGN KEY (course_id) REFERENCES courses(id)
+Referenced by:
+    TABLE "student_courses" CONSTRAINT "student_courses_semester_course_id_fkey" FOREIGN KEY (semester_course_id) REFERENCES semester_courses(id)
+
+neondb=> \d semester_results
+                                 Table "public.semester_results"
+   Column   |     Type     | Collation | Nullable |                   Default                    
+------------+--------------+-----------+----------+----------------------------------------------
+ id         | integer      |           | not null | nextval('semester_results_id_seq'::regclass)
+ student_id | integer      |           |          | 
+ semester   | smallint     |           |          | 
+ sgpa       | numeric(4,2) |           |          | 
+ cgpa       | numeric(4,2) |           |          | 
+Indexes:
+    "semester_results_pkey" PRIMARY KEY, btree (id)
+Foreign-key constraints:
+    "semester_results_student_id_fkey" FOREIGN KEY (student_id) REFERENCES students(id)
+
+neondb=> \d student_courses
+                                  Table "public.student_courses"
+       Column       |  Type   | Collation | Nullable |                   Default                   
+--------------------+---------+-----------+----------+---------------------------------------------
+ id                 | integer |           | not null | nextval('student_courses_id_seq'::regclass)
+ student_id         | integer |           |          | 
+ semester_course_id | integer |           |          | 
+Indexes:
+    "student_courses_pkey" PRIMARY KEY, btree (id)
+Foreign-key constraints:
+    "student_courses_semester_course_id_fkey" FOREIGN KEY (semester_course_id) REFERENCES semester_courses(id)
+    "student_courses_student_id_fkey" FOREIGN KEY (student_id) REFERENCES students(id)
+Referenced by:
+    TABLE "attendance" CONSTRAINT "fk_attendance_student_course" FOREIGN KEY (student_course_id) REFERENCES student_courses(id)
+    TABLE "marks" CONSTRAINT "fk_marks_student_course" FOREIGN KEY (student_course_id) REFERENCES student_courses(id)
+
+neondb=> \d students
+                                      Table "public.students"
+   Column    |          Type          | Collation | Nullable |               Default                
+-------------+------------------------+-----------+----------+--------------------------------------
+ id          | integer                |           | not null | nextval('students_id_seq'::regclass)
+ user_id     | integer                |           |          | 
+ name        | character varying(100) |           |          | 
+ usn         | character varying(50)  |           |          | 
+ current_sem | smallint               |           |          | 
+ batch_year  | integer                |           |          | 
+ department  | department             |           |          | 
+ scheme      | character varying(20)  |           |          | 
+Indexes:
+    "students_pkey" PRIMARY KEY, btree (id)
+Referenced by:
+    TABLE "semester_results" CONSTRAINT "semester_results_student_id_fkey" FOREIGN KEY (student_id) REFERENCES students(id)
+    TABLE "student_courses" CONSTRAINT "student_courses_student_id_fkey" FOREIGN KEY (student_id) REFERENCES students(id)
+
+neondb=> \d users
+                                    Table "public.users"
+ Column |          Type          | Collation | Nullable |              Default              
+--------+------------------------+-----------+----------+-----------------------------------
+ id     | integer                |           | not null | nextval('users_id_seq'::regclass)
+ mobile | character varying(15)  |           |          | 
+ name   | character varying(100) |           |          | 
+Indexes:
+    "users_pkey" PRIMARY KEY, btree (id)
+
+
+
+
+
+
+neondb=> SELECT n.nspname AS enum_schema, 
+       t.typname AS enum_name, 
+       e.enumlabel AS enum_value
+FROM pg_type t 
+JOIN pg_enum e ON t.oid = e.enumtypid 
+JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace;
+ enum_schema |     enum_name      |                  enum_value                  
+-------------+--------------------+----------------------------------------------
+ public      | course_type_enum   | theory_lab
+ public      | course_type_enum   | lab
+ public      | course_type_enum   | theory
+ public      | elective_type_enum | core
+ public      | elective_type_enum | open
+ public      | elective_type_enum | extra_curricular
+ public      | elective_type_enum | professional
+ public      | event_type_enum    | other
+ public      | event_type_enum    | academic
+ public      | event_type_enum    | exam
+ public      | event_type_enum    | holiday
+ public      | department         | Aeronautical Engineering
+ public      | department         | Artificial Intelligence and Machine Learning
+ public      | department         | Civil Engineering
+ public      | department         | Mechanical Engineering
+ public      | department         | Electrical and Electronics Engineering
+ public      | department         | Information Science and Engineering
+ public      | department         | Electronics and Communication Engineering
+ public      | department         | Computer Science and Engineering
+(19 rows)

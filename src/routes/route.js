@@ -17,6 +17,7 @@ const calendar = require("../controllers/calendarController");
 const placement = require("../controllers/placementController");
 const admin = require("../controllers/adminController");
 const performance = require("../controllers/studPerformanceController");
+const chatbot = require('../controllers/chatbot')
 
 // ── Rate limiters ────────────────────────────────────────────
 const otpLimiter = rateLimit({
@@ -61,6 +62,13 @@ router.get("/guest/placements", placement.getPlacementStats);
 //=══════════════════════════════════════════════════════════════
 router.get("/student/:studentId/performance", performance.getPerformance);
 router.get("/student/:studentId/performance/:sem/:intent?", performance.getPerformanceBySem);
+
+
+// ══════════════════════════════════════════════════════════════
+//Query Routes - ChatBot
+//=══════════════════════════════════════════════════════════════
+router.post("/chatbot/query", authenticateUser, chatbot.get_answer)
+router.post("/chatbot/query-guest", chatbot.get_answer)
 
 // ══════════════════════════════════════════════════════════════
 // ADMIN ROUTES
